@@ -8,6 +8,15 @@ import env
 import a3c
 import load_trace
 
+import tensorflow.saved_model as tfsm
+
+# TF saved_model directory
+ACTOR_MODEL_LOCATION  = './actor_model'
+ACTOR_MODEL_TAG = 'actor_model'
+ACTOR_MODEL_PREDICTION_METHOD_NAME = 'actor_model_prediction'
+ACTOR_MODEL_PREDICTION_SIGNATURE_KEY = 'actor_model_prediction_signature_key'
+ACTOR_MODEL_INPUT = 'actor_model_input'
+ACTOR_MODEL_OUTPUT = 'actor_model_output'
 
 S_INFO = 6  # bit_rate, buffer_size, next_chunk_size, bandwidth_measurement(throughput and time), chunk_til_video_end
 S_LEN = 8  # take how many frames in the past
@@ -98,13 +107,28 @@ def central_agent(net_params_queues, exp_queues):
 
         sess.run(tf.global_variables_initializer())
         writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)  # training monitor
-        saver = tf.train.Saver()  # save neural net parameters
+        #saver = tf.train.Saver()  # save neural net parameters
 
         # restore neural net parameters
-        nn_model = NN_MODEL
-        if nn_model is not None:  # nn_model is the path to file
-            saver.restore(sess, nn_model)
-            print("Model restored.")
+        #nn_model = NN_MODEL
+        #if nn_model is not None:  # nn_model is the path to file
+        #    saver.restore(sess, nn_model)
+        #    print("Model restored.")
+
+        # initialize actor model saving settings
+        saver = tfsm.builder.SavedModelBuilder(ACTOR_MODEL_LOCATION)
+        actor_model_input = {ACTOR_MODEL_INPUT : tfsm.utils.build_tensor_info(actor.inputs)}
+        actor_model_output = {ACTOR_MODEL_OUTPUT: tfsm.utils.build_tensor_info(actor.out)}
+        actor_model_prediction_signature = tfsm.signature_def_utils.build_signature_def(
+            actor_model_input, 
+            actor_model_output, 
+            ACTOR_MODEL_PREDICTION_METHOD_NAME
+        )
+        saver.add_meta_graph_and_variables(
+            sess,
+            [ACTOR_MODEL_TAG],
+            {ACTOR_MODEL_PREDICTION_SIGNATURE_KEY: actor_model_prediction_signature}
+        )
 
         epoch = 0
 
@@ -190,13 +214,16 @@ def central_agent(net_params_queues, exp_queues):
             writer.flush()
 
             if epoch % MODEL_SAVE_INTERVAL == 0:
+                logging.info('Saving actor model to location: ' + ACTOR_MODEL_LOCATION)
+                saver.save()
+                logging.info('Actor model has been saved to ' + ACTOR_MODEL_LOCATION)
                 # Save the neural net parameters to disk.
-                save_path = saver.save(sess, SUMMARY_DIR + "/nn_model_ep_" +
-                                       str(epoch) + ".ckpt")
-                logging.info("Model saved in file: " + save_path)
-                testing(epoch, 
-                    SUMMARY_DIR + "/nn_model_ep_" + str(epoch) + ".ckpt", 
-                    test_log_file)
+                #save_path = saver.save(sess, SUMMARY_DIR + "/nn_model_ep_" +
+                #                       str(epoch) + ".ckpt")
+                #logging.info("Model saved in file: " + save_path)
+                #testing(epoch, 
+                #    SUMMARY_DIR + "/nn_model_ep_" + str(epoch) + ".ckpt", 
+                #    test_log_file)
 
 
 def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue):

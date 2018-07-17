@@ -1,3 +1,10 @@
 *.deb
 selenium-2.39.0/
 selenium*.*
+sim/video_size_*
+sim/cooked_*
+sim/results/log_*
+sim/results/events*
+sim/actor_model/
+test/cooked_traces/
+test/actor_model/

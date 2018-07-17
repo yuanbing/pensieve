@@ -50,7 +50,7 @@ def testing(epoch, nn_model, log_file):
     os.system('mkdir ' + TEST_LOG_FOLDER)
     
     # run test script
-    os.system('python rl_test.py ' + nn_model)
+    os.system('python rl_test_sm.py ' + nn_model)
     
     # append test performance to the log
     rewards = []
@@ -214,9 +214,12 @@ def central_agent(net_params_queues, exp_queues):
             writer.flush()
 
             if epoch % MODEL_SAVE_INTERVAL == 0:
+                # Save the actor model along with all the weights
                 logging.info('Saving actor model to location: ' + ACTOR_MODEL_LOCATION)
                 saver.save()
                 logging.info('Actor model has been saved to ' + ACTOR_MODEL_LOCATION)
+                logging.info('Testing saved actor model')
+                testing(epoch, ACTOR_MODEL_LOCATION, test_log_file)
                 # Save the neural net parameters to disk.
                 #save_path = saver.save(sess, SUMMARY_DIR + "/nn_model_ep_" +
                 #                       str(epoch) + ".ckpt")

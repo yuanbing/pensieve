@@ -6,5 +6,8 @@ sim/cooked_*
 sim/results/log_*
 sim/results/events*
 sim/actor_model/
-test/cooked_traces/
+sim/test_results/
+test/cooked_*
 test/actor_model/
+**/*.pyc
+

@@ -117,17 +117,13 @@ def central_agent(net_params_queues, exp_queues):
 
         # initialize actor model saving settings
         saver = tfsm.builder.SavedModelBuilder(ACTOR_MODEL_LOCATION)
+        saver.add_meta_graph_and_variables(sess, [ACTOR_MODEL_TAG])
         actor_model_input = {ACTOR_MODEL_INPUT : tfsm.utils.build_tensor_info(actor.inputs)}
         actor_model_output = {ACTOR_MODEL_OUTPUT: tfsm.utils.build_tensor_info(actor.out)}
         actor_model_prediction_signature = tfsm.signature_def_utils.build_signature_def(
             actor_model_input, 
             actor_model_output, 
             ACTOR_MODEL_PREDICTION_METHOD_NAME
-        )
-        saver.add_meta_graph_and_variables(
-            sess,
-            [ACTOR_MODEL_TAG],
-            {ACTOR_MODEL_PREDICTION_SIGNATURE_KEY: actor_model_prediction_signature}
         )
 
         epoch = 0
@@ -216,6 +212,11 @@ def central_agent(net_params_queues, exp_queues):
             if epoch % MODEL_SAVE_INTERVAL == 0:
                 # Save the actor model along with all the weights
                 logging.info('Saving actor model to location: ' + ACTOR_MODEL_LOCATION)
+                saver.add_meta_graph(
+                    sess,
+                    [ACTOR_MODEL_TAG],
+                    {ACTOR_MODEL_PREDICTION_SIGNATURE_KEY: actor_model_prediction_signature}
+                )
                 saver.save()
                 logging.info('Actor model has been saved to ' + ACTOR_MODEL_LOCATION)
                 logging.info('Testing saved actor model')

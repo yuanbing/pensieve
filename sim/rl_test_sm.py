@@ -1,16 +1,15 @@
 import os
 import sys
-os.environ['CUDA_VISIBLE_DEVICES']=''
 import numpy as np
 import tensorflow as tf
 import load_trace
 import fixed_env as env
 import a3c
 
-import tensorflow.saved_model as tfsm
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 # TF saved_model directory
-ACTOR_MODEL_LOCATION  = sys.argv[1]
+ACTOR_MODEL_LOCATION = sys.argv[1]
 ACTOR_MODEL_TAG = 'actor_model'
 ACTOR_MODEL_PREDICTION_METHOD_NAME = 'actor_model_prediction'
 ACTOR_MODEL_PREDICTION_SIGNATURE_KEY = 'actor_model_prediction_signature_key'
@@ -36,8 +35,11 @@ LOG_FILE = './test_results/log_sim_rl'
 TEST_TRACES = './cooked_test_traces/'
 # log in format of time_stamp bit_rate buffer_size rebuffer_time chunk_size download_time reward
 
+
 def main():
     assert len(VIDEO_BIT_RATE) == A_DIM
+
+    print(os.getcwd())
 
     all_cooked_time, all_cooked_bw, all_file_names = load_trace.load_trace(TEST_TRACES)
 
@@ -45,23 +47,23 @@ def main():
                               all_cooked_bw=all_cooked_bw)
 
     log_path = LOG_FILE + '_' + all_file_names[net_env.trace_idx]
-    log_file = open(log_path, 'wb')
+    log_file = open(log_path, 'w')
 
     with tf.Session() as sess:
         # Check whether the saved actor model exists
-        if not tfsm.loader.maybe_saved_model_directory(ACTOR_MODEL_LOCATION):
+        if not tf.saved_model.loader.maybe_saved_model_directory(ACTOR_MODEL_LOCATION):
             print('cannot find saved actor model')
             sys.exit(1)
         
         # Restore the saved actor model
-        saved_actor_model = tfsm.loader.load(sess, [ACTOR_MODEL_TAG], ACTOR_MODEL_LOCATION)
+        saved_actor_model = tf.saved_model.loader.load(sess, [ACTOR_MODEL_TAG], ACTOR_MODEL_LOCATION)
         signature = saved_actor_model.signature_def
         actor_model_input_name = signature[ACTOR_MODEL_PREDICTION_SIGNATURE_KEY].inputs[ACTOR_MODEL_INPUT].name
         actor_model_output_name = signature[ACTOR_MODEL_PREDICTION_SIGNATURE_KEY].outputs[ACTOR_MODEL_OUTPUT].name
         actor_model_input = sess.graph.get_tensor_by_name(actor_model_input_name)
         actor_model_output = sess.graph.get_tensor_by_name(actor_model_output_name)
 
-        predict = lambda x : sess.run(actor_model_output, feed_dict = {actor_model_input : x})
+        predict = lambda x: sess.run(actor_model_output, feed_dict={actor_model_input: x})
 
         time_stamp = 0
 
@@ -100,13 +102,15 @@ def main():
             last_bit_rate = bit_rate
 
             # log time_stamp, bit_rate, buffer_size, reward
-            log_file.write(str(time_stamp / M_IN_K) + '\t' +
-                           str(VIDEO_BIT_RATE[bit_rate]) + '\t' +
-                           str(buffer_size) + '\t' +
-                           str(rebuf) + '\t' +
-                           str(video_chunk_size) + '\t' +
-                           str(delay) + '\t' +
-                           str(reward) + '\n')
+            log_file.write('{0:.0f}\t{1:.0f}\t{2:f}\t{3:f}\t{4:f}\t{5:.0f}\t{6:f}\n'.format(
+                time_stamp/M_IN_K,
+                VIDEO_BIT_RATE[bit_rate],
+                buffer_size,
+                rebuf,
+                video_chunk_size,
+                delay,
+                reward
+            ))
             log_file.flush()
 
             # retrieve previous state
@@ -138,8 +142,6 @@ def main():
 
             if end_of_video:
                 log_file.write('\n')
-                log_file.close()
-
                 last_bit_rate = DEFAULT_QUALITY
                 bit_rate = DEFAULT_QUALITY  # use the default action here
 
@@ -159,8 +161,10 @@ def main():
                 if video_count >= len(all_file_names):
                     break
 
+                log_file.close()
+
                 log_path = LOG_FILE + '_' + all_file_names[net_env.trace_idx]
-                log_file = open(log_path, 'wb')
+                log_file = open(log_path, 'w')
 
 
 if __name__ == '__main__':

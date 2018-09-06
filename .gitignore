@@ -10,4 +10,5 @@ sim/test_results/
 test/cooked_*
 test/actor_model/
 **/*.pyc
-
+.idea/
+.vscode/

@@ -6,12 +6,11 @@ import tensorflow as tf
 import env
 import a3c
 import load_trace
-from my_model_saver import MyModelSaver
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 # TF saved_model directory
-ACTOR_MODEL_LOCATION = './actor_model'
+ACTOR_MODEL_LOCATION = './trained_actor_model'
 ACTOR_MODEL_TAG = 'actor_model'
 ACTOR_MODEL_PREDICTION_METHOD_NAME = 'actor_model_prediction'
 ACTOR_MODEL_PREDICTION_SIGNATURE_KEY = 'actor_model_prediction_signature_key'
@@ -68,7 +67,15 @@ def get_reward_function():
     return linear_reward
 
 
-def testing(epoch, nn_model, log_file):
+def testModel(epoch, nn_model, log_file):
+    """
+    It tests the saved model
+
+    :param epoch: the epoch index
+    :param nn_model: the location of saved model
+    :param log_file: the log file handle to save the test results
+    :return: None
+    """
     # clean up the test results folder
     os.system('rm -r ' + TEST_LOG_FOLDER)
     os.system('mkdir ' + TEST_LOG_FOLDER)
@@ -113,6 +120,13 @@ def testing(epoch, nn_model, log_file):
 
 
 def central_agent(net_params_queues, exp_queues):
+    """
+    it represents the RL training coordinator that aggregates the experiences from workers and updates the NN parameters
+
+    :param net_params_queues: outbound queue for sending NN parameters to worker agents
+    :param exp_queues: inbound queue for receiving experiences from workers in training
+    :return: None
+    """
     assert len(net_params_queues) == NUM_AGENTS
     assert len(exp_queues) == NUM_AGENTS
 
@@ -140,22 +154,6 @@ def central_agent(net_params_queues, exp_queues):
         # if nn_model is not None:  # nn_model is the path to file
         #    saver.restore(sess, nn_model)
         #    print("Model restored.")
-
-        # initialize actor model saving settings
-        # saver = tf.saved_model.builder.SavedModelBuilder(ACTOR_MODEL_LOCATION)
-        saver = MyModelSaver(ACTOR_MODEL_LOCATION)
-        actor_model_input = {ACTOR_MODEL_INPUT: tf.saved_model.utils.build_tensor_info(actor.inputs)}
-        actor_model_output = {ACTOR_MODEL_OUTPUT: tf.saved_model.utils.build_tensor_info(actor.out)}
-        actor_model_prediction_signature = tf.saved_model.signature_def_utils.build_signature_def(
-            actor_model_input,
-            actor_model_output,
-            ACTOR_MODEL_PREDICTION_METHOD_NAME
-        )
-        saver.add_meta_graph_and_variables(sess,
-                                           [ACTOR_MODEL_TAG],
-                                           {ACTOR_MODEL_PREDICTION_SIGNATURE_KEY: actor_model_prediction_signature}
-                                           )
-        saver.save()
 
         epoch = 0
 
@@ -208,17 +206,9 @@ def central_agent(net_params_queues, exp_queues):
             # compute aggregated gradient
             assert NUM_AGENTS == len(actor_gradient_batch)
             assert len(actor_gradient_batch) == len(critic_gradient_batch)
-            # assembled_actor_gradient = actor_gradient_batch[0]
-            # assembled_critic_gradient = critic_gradient_batch[0]
-            # for i in xrange(len(actor_gradient_batch) - 1):
-            #     for j in xrange(len(assembled_actor_gradient)):
-            #             assembled_actor_gradient[j] += actor_gradient_batch[i][j]
-            #             assembled_critic_gradient[j] += critic_gradient_batch[i][j]
-            # actor.apply_gradients(assembled_actor_gradient)
-            # critic.apply_gradients(assembled_critic_gradient)
-            for i in range(len(actor_gradient_batch)):
-                actor.apply_gradients(actor_gradient_batch[i])
-                critic.apply_gradients(critic_gradient_batch[i])
+            for actor_gradients, critic_gradients in zip(actor_gradient_batch, critic_gradient_batch):
+                actor.apply_gradients(actor_gradients)
+                critic.apply_gradients(critic_gradients)
 
             # log training information
             epoch += 1
@@ -226,10 +216,11 @@ def central_agent(net_params_queues, exp_queues):
             avg_td_loss = total_td_loss / total_batch_len
             avg_entropy = total_entropy / total_batch_len
 
-            logging.info('Epoch: ' + str(epoch) +
-                         ' TD_loss: ' + str(avg_td_loss) +
-                         ' Avg_reward: ' + str(avg_reward) +
-                         ' Avg_entropy: ' + str(avg_entropy))
+            logging.info('Epoch: {} TD_loss: {} Avg_reward: {} Avg_entropy: {}'.
+                         format(epoch,
+                                avg_td_loss,
+                                avg_reward,
+                                avg_entropy))
 
             summary_str = sess.run(summary_ops, feed_dict={
                 summary_vars[0]: avg_td_loss,
@@ -242,25 +233,26 @@ def central_agent(net_params_queues, exp_queues):
 
             if epoch % MODEL_SAVE_INTERVAL == 0:
                 # Save the actor model along with all the weights
-                logging.info('Saving actor model to location: ' + ACTOR_MODEL_LOCATION)
-                """
-                saver.add_meta_graph(
-                    [ACTOR_MODEL_TAG],
-                    {ACTOR_MODEL_PREDICTION_SIGNATURE_KEY: actor_model_prediction_signature}
+                saved_model_location = '{}/{}'.format(ACTOR_MODEL_LOCATION, epoch)
+                logging.info('Saving actor model to location: ' + saved_model_location)
+                saver = tf.saved_model.builder.SavedModelBuilder(saved_model_location)
+                actor_model_input = {ACTOR_MODEL_INPUT: tf.saved_model.utils.build_tensor_info(actor.inputs)}
+                actor_model_output = {ACTOR_MODEL_OUTPUT: tf.saved_model.utils.build_tensor_info(actor.out)}
+                actor_model_prediction_signature = tf.saved_model.signature_def_utils.build_signature_def(
+                    actor_model_input,
+                    actor_model_output,
+                    ACTOR_MODEL_PREDICTION_METHOD_NAME
                 )
-                """
-                saver.update(sess)
-                # saver.save()
-                logging.info('Actor model has been saved to ' + ACTOR_MODEL_LOCATION)
+                saver.add_meta_graph_and_variables(sess,
+                                                   [ACTOR_MODEL_TAG],
+                                                   {
+                                                       ACTOR_MODEL_PREDICTION_SIGNATURE_KEY: actor_model_prediction_signature}
+                                                   )
+                saver.save()
+
+                logging.info('Actor model has been saved to ' + saved_model_location)
                 logging.info('Testing saved actor model')
-                testing(epoch, ACTOR_MODEL_LOCATION, test_log_file)
-                # Save the neural net parameters to disk.
-                # save_path = saver.save(sess, SUMMARY_DIR + "/nn_model_ep_" +
-                #                       str(epoch) + ".ckpt")
-                # logging.info("Model saved in file: " + save_path)
-                # testing(epoch,
-                #    SUMMARY_DIR + "/nn_model_ep_" + str(epoch) + ".ckpt", 
-                #    test_log_file)
+                testModel(epoch, saved_model_location, test_log_file)
 
 
 def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue, reward_function):

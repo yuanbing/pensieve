@@ -39,8 +39,6 @@ TEST_TRACES = './cooked_test_traces/'
 def main():
     assert len(VIDEO_BIT_RATE) == A_DIM
 
-    print(os.getcwd())
-
     all_cooked_time, all_cooked_bw, all_file_names = load_trace.load_trace(TEST_TRACES)
 
     net_env = env.Environment(all_cooked_time=all_cooked_time,
@@ -52,7 +50,7 @@ def main():
     with tf.Session() as sess:
         # Check whether the saved actor model exists
         if not tf.saved_model.loader.maybe_saved_model_directory(ACTOR_MODEL_LOCATION):
-            print('cannot find saved actor model')
+            print('Cannot find saved actor model at ' + ACTOR_MODEL_LOCATION)
             sys.exit(1)
         
         # Restore the saved actor model
@@ -133,7 +131,7 @@ def main():
             action_prob = predict(np.reshape(state, (1, S_INFO, S_LEN)))
             action_cumsum = np.cumsum(action_prob)
             bit_rate = (action_cumsum > np.random.randint(1, RAND_RANGE) / float(RAND_RANGE)).argmax()
-            # Note: we need to discretize the probability into 1/RAND_RANGE steps,
+            # Note: we need to discredit the probability into 1/RAND_RANGE steps,
             # because there is an intrinsic discrepancy in passing single state and batch states
 
             s_batch.append(state)
@@ -158,7 +156,7 @@ def main():
 
                 video_count += 1
 
-                if video_count >= len(all_file_names):
+                if video_count >= len(all_file_names): # all the network traces have been experienced
                     break
 
                 log_file.close()

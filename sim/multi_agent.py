@@ -6,6 +6,7 @@ import tensorflow as tf
 import env
 import a3c
 import load_trace
+import shutil
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
@@ -39,8 +40,6 @@ SUMMARY_DIR = './results'
 LOG_FILE = './results/log'
 TEST_LOG_FOLDER = './test_results/'
 TRAIN_TRACES = './cooked_traces/'
-# NN_MODEL = './results/pretrain_linear_reward.ckpt'
-NN_MODEL = None
 
 
 def get_reward_function():
@@ -67,7 +66,7 @@ def get_reward_function():
     return linear_reward
 
 
-def testModel(epoch, nn_model, log_file):
+def test_model(epoch, nn_model, log_file, best_result_so_far):
     """
     It tests the saved model
 
@@ -118,6 +117,17 @@ def testModel(epoch, nn_model, log_file):
 
     log_file.flush()
 
+    # pick the best trained model so far (based on 95 percentile of rewards
+    if len(best_result_so_far) == 0:
+        best_result_so_far.append(rewards_95per)
+        best_result_so_far.append(nn_model)
+    elif best_result_so_far[0] >= rewards_95per:
+        shutil.rmtree(nn_model, ignore_errors=True)
+    else:
+        shutil.rmtree(best_result_so_far[1], ignore_errors=True)
+        best_result_so_far[0] = rewards_95per
+        best_result_so_far[1] = nn_model
+
 
 def central_agent(net_params_queues, exp_queues):
     """
@@ -129,6 +139,8 @@ def central_agent(net_params_queues, exp_queues):
     """
     assert len(net_params_queues) == NUM_AGENTS
     assert len(exp_queues) == NUM_AGENTS
+
+    best_result_so_far = []
 
     logging.basicConfig(filename=LOG_FILE + '_central',
                         filemode='w',
@@ -147,13 +159,6 @@ def central_agent(net_params_queues, exp_queues):
 
         sess.run(tf.global_variables_initializer())
         writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)  # training monitor
-        # saver = tf.train.Saver()  # save neural net parameters
-
-        # restore neural net parameters
-        # nn_model = NN_MODEL
-        # if nn_model is not None:  # nn_model is the path to file
-        #    saver.restore(sess, nn_model)
-        #    print("Model restored.")
 
         epoch = 0
 
@@ -252,7 +257,7 @@ def central_agent(net_params_queues, exp_queues):
 
                 logging.info('Actor model has been saved to ' + saved_model_location)
                 logging.info('Testing saved actor model')
-                testModel(epoch, saved_model_location, test_log_file)
+                test_model(epoch, saved_model_location, test_log_file, best_result_so_far)
 
 
 def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue, reward_function):
@@ -404,6 +409,11 @@ def main():
     np.random.seed(RANDOM_SEED)
     assert len(VIDEO_BIT_RATE) == A_DIM
 
+    # clean up trained model directory
+    if os.path.exists(ACTOR_MODEL_LOCATION):
+        shutil.rmtree(ACTOR_MODEL_LOCATION, ignore_errors=True)
+
+    os.system('mkdir ' + TEST_LOG_FOLDER)
     # create result directory
     if not os.path.exists(SUMMARY_DIR):
         os.makedirs(SUMMARY_DIR)

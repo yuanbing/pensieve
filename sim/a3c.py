@@ -60,7 +60,7 @@ class ActorNetwork(object):
 
     def create_actor_network(self):
         with tf.variable_scope('actor'):
-            inputs = tflearn.input_data(shape=[None, self.s_dim[0], self.s_dim[1]])
+            inputs = tflearn.input_data(shape=[None, self.s_dim[0], self.s_dim[1]], name='actor_model_inputs')
 
             split_0 = tflearn.fully_connected(inputs[:, 0:1, -1], 128, activation='relu')
             split_1 = tflearn.fully_connected(inputs[:, 1:2, -1], 128, activation='relu')
@@ -76,7 +76,7 @@ class ActorNetwork(object):
             merge_net = tflearn.merge([split_0, split_1, split_2_flat, split_3_flat, split_4_flat, split_5], 'concat')
 
             dense_net_0 = tflearn.fully_connected(merge_net, 128, activation='relu')
-            out = tflearn.fully_connected(dense_net_0, self.a_dim, activation='softmax', name='bitrate_selections')
+            out = tflearn.fully_connected(dense_net_0, self.a_dim, activation='softmax', name='actor_model_outputs')
 
             return inputs, out
 

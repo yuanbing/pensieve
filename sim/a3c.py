@@ -76,7 +76,7 @@ class ActorNetwork(object):
             merge_net = tflearn.merge([split_0, split_1, split_2_flat, split_3_flat, split_4_flat, split_5], 'concat')
 
             dense_net_0 = tflearn.fully_connected(merge_net, 128, activation='relu')
-            out = tflearn.fully_connected(dense_net_0, self.a_dim, activation='softmax')
+            out = tflearn.fully_connected(dense_net_0, self.a_dim, activation='softmax', name='bitrate_selections')
 
             return inputs, out
 

@@ -5,7 +5,7 @@ sim/video_size_*
 sim/cooked_*
 sim/results/log_*
 sim/results/events*
-sim/actor_model/
+sim/trained_actor_model/
 sim/test_results/
 test/cooked_*
 test/actor_model/

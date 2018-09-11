@@ -60,6 +60,8 @@ def main():
         actor_model_output_name = signature[ACTOR_MODEL_PREDICTION_SIGNATURE_KEY].outputs[ACTOR_MODEL_OUTPUT].name
         actor_model_input = sess.graph.get_tensor_by_name(actor_model_input_name)
         actor_model_output = sess.graph.get_tensor_by_name(actor_model_output_name)
+        #print(tf.contrib.graph_editor.get_tensors(tf.get_default_graph()))
+        #print(sess.graph.get_operations())
 
         predict = lambda x: sess.run(actor_model_output, feed_dict={actor_model_input: x})
 

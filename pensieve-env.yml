@@ -1,21 +1,18 @@
 name: cmaf-pensieve
 channels:
-  - contango
   - conda-forge
   - defaults
 dependencies:
-  - ca-certificates=2018.4.16=0
-  - certifi=2018.4.16=py36_0
   - easyprocess=0.2.3=py36_0
-  - openssl=1.0.2o=0
   - pyvirtualdisplay=0.2.1=py36_0
-  - tflearn=0.3.2=py36he51c03d_0
   - _tflow_180_select=3.0=eigen
   - absl-py=0.2.2=py36_0
   - astor=0.6.2=py36_1
   - astroid=1.6.5=py36_0
   - blas=1.0=mkl
   - bleach=1.5.0=py36_0
+  - ca-certificates=2018.03.07=0
+  - certifi=2018.8.24=py36_1
   - cycler=0.10.0=py36_0
   - dbus=1.13.2=h714fa37_1
   - expat=2.2.5=he0dffb1_0
@@ -56,6 +53,7 @@ dependencies:
   - numpy=1.14.5=py36h1b885b7_4
   - numpy-base=1.14.5=py36hdbf6ddf_4
   - olefile=0.45.1=py36_0
+  - openssl=1.0.2p=h14c3975_0
   - pcre=8.42=h439df22_0
   - pillow=5.1.0=py36heded4f4_0
   - pip=10.0.1=py36_0
@@ -73,9 +71,6 @@ dependencies:
   - sip=4.19.8=py36hf484d3e_0
   - six=1.11.0=py36_1
   - sqlite=3.24.0=h84994c4_0
-  - tensorboard=1.8.0=py36hf484d3e_0
-  - tensorflow=1.8.0=h57681fa_0
-  - tensorflow-base=1.8.0=py36h5f64886_0
   - termcolor=1.1.0=py36_1
   - tk=8.6.7=hc745277_3
   - tornado=5.0.2=py36h14c3975_0
@@ -85,10 +80,12 @@ dependencies:
   - xz=5.2.4=h14c3975_4
   - zlib=1.2.11=ha838bed_2
   - pip:
-    - keras==2.1.4
+    - keras==2.2.2
+    - keras-applications==1.0.4
+    - keras-preprocessing==1.0.2
     - pyyaml==3.13
-    - tensorflow-hub==0.1.0
-    - tensorflow-serving-api==1.9.0
-    - tensorflowjs==0.5.2
+    - tensorflow==1.10.1
+    - tensorflowjs==0.6.0
+    - tflearn==0.3.2
 prefix: /home/byuan/anaconda2/envs/cmaf-pensieve
 

@@ -42,6 +42,9 @@ TEST_LOG_FOLDER = './test_results/'
 TRAIN_TRACES = './cooked_traces/'
 
 
+MAX_EPOCH = 10000
+
+
 def get_reward_function():
     # -- linear reward --
     # reward is video quality - rebuffer penalty - smoothness
@@ -146,7 +149,7 @@ def central_agent(net_params_queues, exp_queues):
                         filemode='w',
                         level=logging.INFO)
 
-    with tf.Session() as sess, open(LOG_FILE + '_test', 'w') as test_log_file:
+    with tf.Session(graph=tf.Graph()) as sess, open(LOG_FILE + '_test', 'w') as test_log_file:
 
         actor = a3c.ActorNetwork(sess,
                                  state_dim=[S_INFO, S_LEN], action_dim=A_DIM,
@@ -237,7 +240,6 @@ def central_agent(net_params_queues, exp_queues):
             writer.flush()
 
             if epoch % MODEL_SAVE_INTERVAL == 0:
-                # Save the actor model along with all the weights
                 saved_model_location = '{}/{}'.format(ACTOR_MODEL_LOCATION, epoch)
                 logging.info('Saving actor model to location: ' + saved_model_location)
                 saver = tf.saved_model.builder.SavedModelBuilder(saved_model_location)
@@ -258,6 +260,20 @@ def central_agent(net_params_queues, exp_queues):
                 logging.info('Actor model has been saved to ' + saved_model_location)
                 logging.info('Testing saved actor model')
                 test_model(epoch, saved_model_location, test_log_file, best_result_so_far)
+
+            if epoch == MAX_EPOCH:
+                # tell each worker to shut down
+                for i in range(NUM_AGENTS):
+                    logging.debug('Informing worker {} to shutdown'.format(i))
+                    net_params_queues[i].put(None)
+                    #print('Waiting for worker {} to shutdown'.format(i))
+                    logging.debug('Waiting for worker {} to shutdown'.format(i))
+                    net_params_queues[i].join()
+                    logging.debug('Worker {} has shutdown'.format(i))
+                break
+
+    logging.debug("Central agent exits")
+    return
 
 
 def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue, reward_function):
@@ -287,6 +303,8 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
 
         # initial synchronization of the network parameters from the coordinator
         actor_net_params, critic_net_params = net_params_queue.get()
+        net_params_queue.task_done()
+
         actor.set_network_params(actor_net_params)
         critic.set_network_params(critic_net_params)
 
@@ -375,7 +393,16 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
                                {'entropy': entropy_record}])
 
                 # synchronize the network parameters from the coordinator
-                actor_net_params, critic_net_params = net_params_queue.get()
+                net_params = net_params_queue.get()
+                if net_params is None:
+                    # received signal from central agent to shutdown
+                    #print('agent {} is told to shut down'.format(agent_id))
+                    logging.debug('Worker {} is told to shut down'.format(agent_id))
+                    net_params_queue.task_done()
+                    break
+
+                net_params_queue.task_done()
+                actor_net_params, critic_net_params = net_params
                 actor.set_network_params(actor_net_params)
                 critic.set_network_params(critic_net_params)
 
@@ -404,6 +431,9 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
                 action_vec[bit_rate] = 1
                 a_batch.append(action_vec)
 
+        logging.debug('Worker {} exits'.format(agent_id))
+        return
+
 
 def main():
     np.random.seed(RANDOM_SEED)
@@ -422,7 +452,7 @@ def main():
     net_params_queues = []
     exp_queues = []
     for i in range(NUM_AGENTS):
-        net_params_queues.append(mp.Queue(1))
+        net_params_queues.append(mp.JoinableQueue(1))
         exp_queues.append(mp.Queue(1))
 
     # create a coordinator and multiple agent processes
@@ -446,6 +476,8 @@ def main():
 
     # wait unit training is done
     coordinator.join()
+
+    logging.info('The model training has ended')
 
 
 if __name__ == '__main__':

@@ -9,6 +9,8 @@ dependencies:
   - absl-py=0.2.2=py36_0
   - astor=0.6.2=py36_1
   - astroid=1.6.5=py36_0
+  - atomicwrites=1.2.1=py36_0
+  - attrs=18.2.0=py36h28b3542_0
   - blas=1.0=mkl
   - bleach=1.5.0=py36_0
   - ca-certificates=2018.03.07=0
@@ -49,6 +51,7 @@ dependencies:
   - mkl=2018.0.3=1
   - mkl_fft=1.0.2=py36h651fb7a_0
   - mkl_random=1.0.1=py36h4414c95_1
+  - more-itertools=4.3.0=py36_0
   - ncurses=6.1=hf484d3e_0
   - numpy=1.14.5=py36h1b885b7_4
   - numpy-base=1.14.5=py36hdbf6ddf_4
@@ -57,10 +60,13 @@ dependencies:
   - pcre=8.42=h439df22_0
   - pillow=5.1.0=py36heded4f4_0
   - pip=10.0.1=py36_0
+  - pluggy=0.7.1=py36h28b3542_0
   - protobuf=3.5.2=py36hf484d3e_1
+  - py=1.6.0=py36_0
   - pylint=1.9.2=py36_0
   - pyparsing=2.2.0=py36_1
   - pyqt=5.9.2=py36h22d08a2_0
+  - pytest=3.8.0=py36_0
   - python=3.6.6=hc3d631a_0
   - python-dateutil=2.7.3=py36_0
   - pytz=2018.5=py36_0

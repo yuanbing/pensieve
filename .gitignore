@@ -12,3 +12,4 @@ test/actor_model/
 **/*.pyc
 .idea/
 .vscode/
+.pytest_cache/

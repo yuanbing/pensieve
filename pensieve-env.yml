@@ -84,7 +84,9 @@ dependencies:
     - keras-applications==1.0.4
     - keras-preprocessing==1.0.2
     - pyyaml==3.13
+    - tensorboard==1.10.0
     - tensorflow==1.10.1
+    - tensorflow-hub==0.1.1
     - tensorflowjs==0.6.0
     - tflearn==0.3.2
 prefix: /home/byuan/anaconda2/envs/cmaf-pensieve

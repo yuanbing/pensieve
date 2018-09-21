@@ -10,10 +10,10 @@ class TestPensieveConfig(unittest.TestCase):
     def test_loading_config(self):
         self.assertIsNotNone(self._test_config)
 
-    def test_has_training_config(self):
+    def test_has_model_saving_config(self):
         self.assertIsNotNone(self._test_config.get_model_saving_config())
 
-    def test_training_config(self):
+    def test_model_saving_config(self):
         model_saving_config = self._test_config.get_model_saving_config()
         self.assertEqual(model_saving_config.get_location(), 'model location')
         self.assertEqual(model_saving_config.get_model_tag(), 'model tag')
@@ -22,3 +22,8 @@ class TestPensieveConfig(unittest.TestCase):
         self.assertEqual(model_saving_config.get_inference_method_input(), 'prediction input')
         self.assertEqual(model_saving_config.get_inference_method_output(), 'prediction output')
 
+    def test_get_model_training_config(self):
+        self.assertIsNotNone(self._test_config.get_model_saving_config())
+
+    def test_get_logging_config(self):
+        self.assertIsNotNone(self._test_config.get_logging_config())

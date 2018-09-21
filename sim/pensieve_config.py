@@ -9,22 +9,25 @@ class PensieveTrainingConfig:
     def __init__(self, config_file):
         self._config = configparser.ConfigParser()
         self._config.read(config_file)
+        self._model_saving_config = msc.ModelSavingConfig(self._config['Model Saving'])
+        self._model_training_config = mtc.ModelTrainingConfig(self._config['Model Training'])
+        self._logging_config = lc.LoggingConfig(self._config['Logging'])
 
     def get_model_saving_config(self):
         """
         :return: instance of ModelSavingConfig
         """
-        return msc.ModelSavingConfig(self._config['Model Saving'])
+        return self._model_saving_config
 
     def get_model_training_config(self):
         """
         :return: instance of ModelTrainingConfig
         """
-        return mtc.ModelTrainingConfig(self._config['Model Training'])
+        return self._model_training_config
 
     def get_logging_config(self):
         """
         :return: instance of LoggingConfig
         """
-        return lc.LoggingConfig(self._config['Logging'])
+        return self._logging_config
 

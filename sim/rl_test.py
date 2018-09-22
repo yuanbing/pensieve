@@ -45,11 +45,13 @@ def main():
     with tf.Session() as sess:
 
         actor = a3c.ActorNetwork(sess,
-                                 state_dim=[S_INFO, S_LEN], action_dim=A_DIM,
+                                 state_dim=[S_INFO, S_LEN],
+                                 action_dim=A_DIM,
                                  learning_rate=ACTOR_LR_RATE)
 
         critic = a3c.CriticNetwork(sess,
                                    state_dim=[S_INFO, S_LEN],
+                                   action_dim=A_DIM,
                                    learning_rate=CRITIC_LR_RATE)
 
         sess.run(tf.global_variables_initializer())

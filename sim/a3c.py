@@ -4,10 +4,8 @@ import tflearn
 
 
 GAMMA = 0.99
-A_DIM = 6
 ENTROPY_WEIGHT = 0.5
 ENTROPY_EPS = 1e-6
-S_INFO = 4
 
 
 class ActorNetwork(object):
@@ -66,7 +64,7 @@ class ActorNetwork(object):
             split_1 = tflearn.fully_connected(inputs[:, 1:2, -1], 128, activation='relu')
             split_2 = tflearn.conv_1d(inputs[:, 2:3, :], 128, 4, activation='relu')
             split_3 = tflearn.conv_1d(inputs[:, 3:4, :], 128, 4, activation='relu')
-            split_4 = tflearn.conv_1d(inputs[:, 4:5, :A_DIM], 128, 4, activation='relu')
+            split_4 = tflearn.conv_1d(inputs[:, 4:5, :self.a_dim], 128, 4, activation='relu')
             split_5 = tflearn.fully_connected(inputs[:, 5:6, -1], 128, activation='relu')
 
             split_2_flat = tflearn.flatten(split_2)
@@ -119,9 +117,10 @@ class CriticNetwork(object):
     Input to the network is the state and action, output is V(s).
     On policy: the action must be obtained from the output of the Actor network.
     """
-    def __init__(self, sess, state_dim, learning_rate):
+    def __init__(self, sess, state_dim, action_dim, learning_rate):
         self.sess = sess
         self.s_dim = state_dim
+        self.a_dim = action_dim
         self.lr_rate = learning_rate
 
         # Create the critic network
@@ -164,7 +163,7 @@ class CriticNetwork(object):
             split_1 = tflearn.fully_connected(inputs[:, 1:2, -1], 128, activation='relu')
             split_2 = tflearn.conv_1d(inputs[:, 2:3, :], 128, 4, activation='relu')
             split_3 = tflearn.conv_1d(inputs[:, 3:4, :], 128, 4, activation='relu')
-            split_4 = tflearn.conv_1d(inputs[:, 4:5, :A_DIM], 128, 4, activation='relu')
+            split_4 = tflearn.conv_1d(inputs[:, 4:5, :self.a_dim], 128, 4, activation='relu')
             split_5 = tflearn.fully_connected(inputs[:, 5:6, -1], 128, activation='relu')
 
             split_2_flat = tflearn.flatten(split_2)

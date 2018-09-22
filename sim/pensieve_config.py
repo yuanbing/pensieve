@@ -2,9 +2,10 @@ import configparser
 import model_saving_config as msc
 import model_training_config as mtc
 import logging_config as lc
+import os
 
 
-class PensieveTrainingConfig:
+class PensieveConfig:
 
     def __init__(self, config_file):
         self._config = configparser.ConfigParser()
@@ -31,3 +32,23 @@ class PensieveTrainingConfig:
         """
         return self._logging_config
 
+    def get_model_path(self, epoch):
+        if epoch is None:
+            return os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                self.get_model_saving_config().get_location())
+        else:
+            return os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                self.get_model_saving_config().get_location(),
+                                epoch)
+
+    def get_test_result_path(self):
+        return os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            self.get_logging_config().get_test_result_location())
+
+    def get_log_path(self):
+        return os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            self.get_logging_config().get_location())
+
+    def get_network_trace_path(self):
+        return os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            self.get_model_training_config().get_network_trace_location())

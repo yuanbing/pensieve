@@ -5,7 +5,7 @@ import pensieve_config as tc
 class TestPensieveConfig(unittest.TestCase):
 
     def setUp(self):
-        self._test_config = tc.PensieveTrainingConfig('test_config.ini')
+        self._test_config = tc.PensieveConfig('test_config.ini')
 
     def test_loading_config(self):
         self.assertIsNotNone(self._test_config)

@@ -22,7 +22,7 @@ def load_trace(cooked_trace_folder=COOKED_TRACE_FOLDER):
     all_file_names = []
 
     for cooked_file in cooked_files:
-        file_path = cooked_trace_folder + cooked_file
+        file_path = os.path.join(cooked_trace_folder, cooked_file)
         cooked_time = []
         cooked_bw = []
 

@@ -1,5 +1,6 @@
 import logging
 
+
 class LoggingConfig:
 
     def __init__(self, raw_config):

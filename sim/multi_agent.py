@@ -7,51 +7,24 @@ import env
 import a3c
 import load_trace
 import shutil
+import pensieve_config as pc
 
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
-# TF saved_model directory
-ACTOR_MODEL_LOCATION = './trained_actor_model'
-ACTOR_MODEL_TAG = 'actor_model'
-ACTOR_MODEL_PREDICTION_METHOD_NAME = 'actor_model_prediction'
-ACTOR_MODEL_PREDICTION_SIGNATURE_KEY = 'actor_model_prediction_signature_key'
-ACTOR_MODEL_INPUT = 'actor_model_input'
-ACTOR_MODEL_OUTPUT = 'actor_model_output'
-
-S_INFO = 6  # bit_rate, buffer_size, next_chunk_size, bandwidth_measurement(throughput and time), chunk_til_video_end
-S_LEN = 8  # take how many frames in the past
-A_DIM = 6
-ACTOR_LR_RATE = 0.0001
-CRITIC_LR_RATE = 0.001
-NUM_AGENTS = 16
-TRAIN_SEQ_LEN = 100  # take as a train batch
-MODEL_SAVE_INTERVAL = 100
-VIDEO_BIT_RATE = [300, 750, 1200, 1850, 2850, 4300]  # Kbps
-HD_REWARD = [1, 2, 3, 12, 15, 20]
-BUFFER_NORM_FACTOR = 10.0
-CHUNK_TIL_VIDEO_END_CAP = 48.0
-M_IN_K = 1000.0
-REBUF_PENALTY = 4.3  # 1 sec rebuffering -> 3 Mbps
-SMOOTH_PENALTY = 1
-DEFAULT_QUALITY = 1  # default video quality without agent
 RANDOM_SEED = 42
 RAND_RANGE = 1000
-SUMMARY_DIR = './results'
-LOG_FILE = './results/log'
-TEST_LOG_FOLDER = './test_results/'
-TRAIN_TRACES = './cooked_traces/'
+M_IN_K = 1000.0
 
 
-MAX_EPOCH = 10000
+def get_reward_function(config):
+    bitrates = config.get_bitrates()
 
-
-def get_reward_function():
     # -- linear reward --
     # reward is video quality - rebuffer penalty - smoothness
     def linear_reward(bitrate, last_bitrate, playback_state):
-        return VIDEO_BIT_RATE[bitrate]/M_IN_K - \
-               REBUF_PENALTY*playback_state.rebuffer_time - \
-               SMOOTH_PENALTY * np.abs(VIDEO_BIT_RATE[bitrate]-VIDEO_BIT_RATE[last_bitrate])/M_IN_K
+        return bitrates[bitrate]/M_IN_K - \
+               config.get_rebuffer_penalty()*playback_state.rebuffer_time - \
+               config.get_smooth_penalty() * np.abs(bitrates[bitrate]-bitrates[last_bitrate])/M_IN_K
 
     # -- log scale reward --
     # log_bit_rate = np.log(VIDEO_BIT_RATE[bit_rate] / float(VIDEO_BIT_RATE[-1]))
@@ -69,7 +42,7 @@ def get_reward_function():
     return linear_reward
 
 
-def test_model(epoch, nn_model, log_file, best_result_so_far):
+def test_model(epoch, nn_model, log_file, best_result_so_far, config):
     """
     It tests the saved model
 
@@ -78,19 +51,16 @@ def test_model(epoch, nn_model, log_file, best_result_so_far):
     :param log_file: the log file handle to save the test results
     :return: None
     """
-    # clean up the test results folder
-    os.system('rm -r ' + TEST_LOG_FOLDER)
-    os.system('mkdir ' + TEST_LOG_FOLDER)
-
     # run test script
     os.system('python rl_test_sm.py ' + nn_model)
 
     # append test performance to the log
     rewards = []
-    test_log_files = os.listdir(TEST_LOG_FOLDER)
+    test_result_path = config.get_test_result_path()
+    test_log_files = os.listdir(test_result_path)
     for test_log_file in test_log_files:
         reward = []
-        with open(TEST_LOG_FOLDER + test_log_file, 'r') as f:
+        with open(os.path.join(test_result_path, test_log_file), 'r') as f:
             for line in f:
                 parse = line.split()
                 try:
@@ -132,45 +102,53 @@ def test_model(epoch, nn_model, log_file, best_result_so_far):
         best_result_so_far[1] = nn_model
 
 
-def central_agent(net_params_queues, exp_queues):
+def central_agent(net_params_queues, exp_queues, config):
     """
     it represents the RL training coordinator that aggregates the experiences from workers and updates the NN parameters
 
     :param net_params_queues: outbound queue for sending NN parameters to worker agents
     :param exp_queues: inbound queue for receiving experiences from workers in training
+    :param config: pensieve configuration
     :return: None
     """
-    assert len(net_params_queues) == NUM_AGENTS
-    assert len(exp_queues) == NUM_AGENTS
-
     best_result_so_far = []
 
-    logging.basicConfig(filename=LOG_FILE + '_central',
-                        filemode='w',
-                        level=logging.INFO)
+    log_path = config.get_log_path()
 
-    with tf.Session(graph=tf.Graph()) as sess, open(LOG_FILE + '_test', 'w') as test_log_file:
+    logging.basicConfig(filename=os.path.join(log_path, 'log_central'),
+                        filemode='w',
+                        level=config.get_logging_config().get_logging_level())
+
+    with tf.Session(graph=tf.Graph()) as sess, \
+            open(os.path.join(log_path, 'log_test'), 'w') as test_log_file:
+
+        training_config = config.get_model_training_config()
+        model_saving_config = config.get_model_saving_config()
 
         actor = a3c.ActorNetwork(sess,
-                                 state_dim=[S_INFO, S_LEN], action_dim=A_DIM,
-                                 learning_rate=ACTOR_LR_RATE)
+                                 state_dim=[training_config.get_states(), training_config.get_state_history()],
+                                 action_dim=training_config.get_actions(),
+                                 learning_rate=training_config.get_actor_learning_rate())
         critic = a3c.CriticNetwork(sess,
-                                   state_dim=[S_INFO, S_LEN],
-                                   learning_rate=CRITIC_LR_RATE)
+                                   state_dim=[training_config.get_states(), training_config.get_state_history()],
+                                   action_dim=training_config.get_actions(),
+                                   learning_rate=training_config.get_critic_learning_rate())
 
         summary_ops, summary_vars = a3c.build_summaries()
 
         sess.run(tf.global_variables_initializer())
-        writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)  # training monitor
+        writer = tf.summary.FileWriter(log_path, sess.graph)  # training monitor
 
         epoch = 0
+
+        number_of_agents = training_config.get_number_of_agents()
 
         # assemble experiences from agents, compute the gradients
         while True:
             # synchronize the network parameters of work agent
             actor_net_params = actor.get_network_params()
             critic_net_params = critic.get_network_params()
-            for i in range(NUM_AGENTS):
+            for i in range(number_of_agents):
                 net_params_queues[i].put([actor_net_params, critic_net_params])
                 # Note: this is synchronous version of the parallel training,
                 # which is easier to understand and probe. The framework can be
@@ -192,7 +170,7 @@ def central_agent(net_params_queues, exp_queues):
             actor_gradient_batch = []
             critic_gradient_batch = []
 
-            for i in range(NUM_AGENTS):
+            for i in range(number_of_agents):
                 s_batch, a_batch, r_batch, terminal, info = exp_queues[i].get()
 
                 actor_gradient, critic_gradient, td_batch = \
@@ -212,7 +190,7 @@ def central_agent(net_params_queues, exp_queues):
                 total_entropy += np.sum(info['entropy'])
 
             # compute aggregated gradient
-            assert NUM_AGENTS == len(actor_gradient_batch)
+            assert number_of_agents == len(actor_gradient_batch)
             assert len(actor_gradient_batch) == len(critic_gradient_batch)
             for actor_gradients, critic_gradients in zip(actor_gradient_batch, critic_gradient_batch):
                 actor.apply_gradients(actor_gradients)
@@ -239,31 +217,34 @@ def central_agent(net_params_queues, exp_queues):
             writer.add_summary(summary_str, epoch)
             writer.flush()
 
-            if epoch % MODEL_SAVE_INTERVAL == 0:
-                saved_model_location = '{}/{}'.format(ACTOR_MODEL_LOCATION, epoch)
+            if epoch % training_config.get_batch_size() == 0:
+                saved_model_location = config.get_model_path(str(epoch))
                 logging.info('Saving actor model to location: ' + saved_model_location)
                 saver = tf.saved_model.builder.SavedModelBuilder(saved_model_location)
-                actor_model_input = {ACTOR_MODEL_INPUT: tf.saved_model.utils.build_tensor_info(actor.inputs)}
-                actor_model_output = {ACTOR_MODEL_OUTPUT: tf.saved_model.utils.build_tensor_info(actor.out)}
+                actor_model_input = {model_saving_config.get_inference_method_input():
+                                         tf.saved_model.utils.build_tensor_info(actor.inputs)}
+                actor_model_output = {model_saving_config.get_inference_method_output():
+                                          tf.saved_model.utils.build_tensor_info(actor.out)}
                 actor_model_prediction_signature = tf.saved_model.signature_def_utils.build_signature_def(
                     actor_model_input,
                     actor_model_output,
-                    ACTOR_MODEL_PREDICTION_METHOD_NAME
+                    model_saving_config.get_inference_method_name()
                 )
                 saver.add_meta_graph_and_variables(sess,
-                                                   [ACTOR_MODEL_TAG],
+                                                   [model_saving_config.get_model_tag()],
                                                    {
-                                                       ACTOR_MODEL_PREDICTION_SIGNATURE_KEY: actor_model_prediction_signature}
-                                                   )
+                                                       model_saving_config.get_inference_method_signature():
+                                                           actor_model_prediction_signature
+                                                   })
                 saver.save()
 
                 logging.info('Actor model has been saved to ' + saved_model_location)
                 logging.info('Testing saved actor model')
-                test_model(epoch, saved_model_location, test_log_file, best_result_so_far)
+                test_model(epoch, saved_model_location, test_log_file, best_result_so_far, config)
 
-            if epoch == MAX_EPOCH:
+            if epoch == training_config.get_max_training_epoch():
                 # tell each worker to shut down
-                for i in range(NUM_AGENTS):
+                for i in range(number_of_agents):
                     logging.debug('Informing worker {} to shutdown'.format(i))
                     net_params_queues[i].put(None)
                     #print('Waiting for worker {} to shutdown'.format(i))
@@ -276,7 +257,7 @@ def central_agent(net_params_queues, exp_queues):
     return
 
 
-def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue, reward_function):
+def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue, reward_function, config):
     """
     Launch the worker agent
 
@@ -286,20 +267,27 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
     :param net_params_queue: inbound IPC channel for receiving NN parameters from central agent (coordinator)
     :param exp_queue: outbound IPC channel for sending NN parameters to central agent (coordinator)
     :param reward_function: the reward function
+    :param config: pensieve configuration
     :return: None
     """
     net_env = env.Environment(all_cooked_time=all_cooked_time,
                               all_cooked_bw=all_cooked_bw,
                               random_seed=agent_id)
+    log_file = os.path.join(config.get_log_path(), 'log_agent_{}'.format(agent_id))
+    training_config = config.get_model_training_config()
+    state_dim = training_config.get_states()
+    state_history = training_config.get_state_history()
 
-    with tf.Session() as sess, open('{}_agent_{}'.format(LOG_FILE, agent_id), 'w') as log_file:
+    with tf.Session() as sess, open(log_file, 'w') as log_file:
         actor = a3c.ActorNetwork(sess,
-                                 state_dim=[S_INFO, S_LEN], action_dim=A_DIM,
-                                 learning_rate=ACTOR_LR_RATE)
+                                 state_dim=[state_dim, state_history],
+                                 action_dim=training_config.get_actions(),
+                                 learning_rate=training_config.get_actor_learning_rate())
 
         critic = a3c.CriticNetwork(sess,
-                                   state_dim=[S_INFO, S_LEN],
-                                   learning_rate=CRITIC_LR_RATE)
+                                   state_dim=[state_dim, state_history],
+                                   action_dim=training_config.get_actions(),
+                                   learning_rate=training_config.get_critic_learning_rate())
 
         # initial synchronization of the network parameters from the coordinator
         actor_net_params, critic_net_params = net_params_queue.get()
@@ -308,13 +296,13 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
         actor.set_network_params(actor_net_params)
         critic.set_network_params(critic_net_params)
 
-        last_bit_rate = DEFAULT_QUALITY
-        bit_rate = DEFAULT_QUALITY
+        last_bit_rate = training_config.get_default_video_quality()
+        bit_rate = last_bit_rate
 
-        action_vec = np.zeros(A_DIM)
+        action_vec = np.zeros(training_config.get_actions())
         action_vec[bit_rate] = 1
 
-        s_batch = [np.zeros((S_INFO, S_LEN))]
+        s_batch = [np.zeros((state_dim, state_history))]
         a_batch = [action_vec]
         r_batch = []
         entropy_record = []
@@ -347,7 +335,7 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
 
             # retrieve previous state
             if len(s_batch) == 0:
-                state = [np.zeros((S_INFO, S_LEN))]
+                state = [np.zeros((state_dim, state_history))]
             else:
                 state = np.array(s_batch[-1], copy=True)
 
@@ -355,15 +343,16 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
             state = np.roll(state, -1, axis=1)
 
             # this should be S_INFO number of terms
-            state[0, -1] = VIDEO_BIT_RATE[bit_rate] / float(np.max(VIDEO_BIT_RATE))  # last quality
-            state[1, -1] = buffer_size / BUFFER_NORM_FACTOR  # 10 sec
+            # last quality
+            state[0, -1] = training_config.get_bitrates()[bit_rate] / float(np.max(training_config.get_bitrates()))
+            state[1, -1] = buffer_size / training_config.get_buffer_norm_factor()  # 10 sec
             state[2, -1] = float(video_chunk_size) / float(delay) / M_IN_K  # kilo byte / ms
-            state[3, -1] = float(delay) / M_IN_K / BUFFER_NORM_FACTOR  # 10 sec
-            state[4, :A_DIM] = np.array(next_video_chunk_sizes) / M_IN_K / M_IN_K  # mega byte
-            state[5, -1] = np.minimum(video_chunk_remain, CHUNK_TIL_VIDEO_END_CAP) / float(CHUNK_TIL_VIDEO_END_CAP)
+            state[3, -1] = float(delay) / M_IN_K / training_config.get_buffer_norm_factor()  # 10 sec
+            state[4, :training_config.get_actions()] = np.array(next_video_chunk_sizes) / M_IN_K / M_IN_K  # mega byte
+            state[5, -1] = np.minimum(video_chunk_remain, training_config.get_chunk_cap()) / training_config.get_chunk_cap()
 
             # compute action probability vector
-            action_prob = actor.predict(np.reshape(state, (1, S_INFO, S_LEN)))
+            action_prob = actor.predict(np.reshape(state, (1, state_dim, state_history)))
             action_cumsum = np.cumsum(action_prob)
             bit_rate = (action_cumsum > np.random.randint(1, RAND_RANGE) / float(RAND_RANGE)).argmax()
             # Note: we need to discredit the probability into 1/RAND_RANGE steps,
@@ -374,7 +363,7 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
             # log time_stamp, bit_rate, buffer_size, reward
             log_file.write("{0:.0f}\t{1:.0f}\t{2:f}\t{3:f}\t{4:f}\t{5:.0f}\t{6:f}\n".format(
                 time_stamp,
-                VIDEO_BIT_RATE[bit_rate],
+                training_config.get_bitrates()[bit_rate],
                 buffer_size,
                 rebuf,
                 video_chunk_size,
@@ -385,7 +374,7 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
             log_file.flush()
 
             # report experience to the coordinator
-            if len(r_batch) >= TRAIN_SEQ_LEN or end_of_video:
+            if len(r_batch) >= training_config.get_batch_size() or end_of_video:
                 exp_queue.put([s_batch[1:],  # ignore the first chuck
                                a_batch[1:],  # since we don't have the
                                r_batch[1:],  # control over it
@@ -415,19 +404,19 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
 
             # store the state and action into batches
             if end_of_video:
-                last_bit_rate = DEFAULT_QUALITY
-                bit_rate = DEFAULT_QUALITY  # use the default action here
+                last_bit_rate = training_config.get_default_video_quality()
+                bit_rate = last_bit_rate  # use the default action here
 
-                action_vec = np.zeros(A_DIM)
+                action_vec = np.zeros(training_config.get_actions())
                 action_vec[bit_rate] = 1
 
-                s_batch.append(np.zeros((S_INFO, S_LEN)))
+                s_batch.append(np.zeros((state_dim, state_history)))
                 a_batch.append(action_vec)
 
             else:
                 s_batch.append(state)
 
-                action_vec = np.zeros(A_DIM)
+                action_vec = np.zeros(training_config.get_actions())
                 action_vec[bit_rate] = 1
                 a_batch.append(action_vec)
 
@@ -435,43 +424,56 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
         return
 
 
+def init(config_file):
+    config = pc.PensieveConfig(config_file)
+
+    # purge saved model directory
+    saved_model_path = config.get_model_path(None)
+    if os.path.exists(saved_model_path):
+        shutil.rmtree(saved_model_path)
+
+    # create the directory for log files if it doesn't exist already
+    log_path = config.get_log_path()
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+
+    # create the directory for test results if it doesn't exist already
+    test_result_path = config.get_test_result_path()
+    if not os.path.exists(test_result_path):
+        os.makedirs(test_result_path)
+
+    return config
+
+
 def main():
     np.random.seed(RANDOM_SEED)
-    assert len(VIDEO_BIT_RATE) == A_DIM
 
-    # clean up trained model directory
-    if os.path.exists(ACTOR_MODEL_LOCATION):
-        shutil.rmtree(ACTOR_MODEL_LOCATION, ignore_errors=True)
+    config = init('config.ini')
 
-    os.system('mkdir ' + TEST_LOG_FOLDER)
-    # create result directory
-    if not os.path.exists(SUMMARY_DIR):
-        os.makedirs(SUMMARY_DIR)
+    number_of_agents = config.get_model_training_config().get_number_of_agents()
 
-    # inter-process communication queues
-    net_params_queues = []
-    exp_queues = []
-    for i in range(NUM_AGENTS):
-        net_params_queues.append(mp.JoinableQueue(1))
-        exp_queues.append(mp.Queue(1))
+    # create IPC queues
+    net_params_queues = [mp.JoinableQueue(1) for i in range(number_of_agents)]
+    exp_queues = [mp.Queue(1) for i in range(number_of_agents)]
 
     # create a coordinator and multiple agent processes
     # (note: threading is not desirable due to python GIL)
     coordinator = mp.Process(target=central_agent,
-                             args=(net_params_queues, exp_queues))
+                             args=(net_params_queues, exp_queues, config))
     coordinator.start()
 
     # load trace files
-    all_cooked_time, all_cooked_bw, _ = load_trace.load_trace(TRAIN_TRACES)
+    all_cooked_time, all_cooked_bw, _ = load_trace.load_trace(config.get_network_trace_path())
 
     agents = []
-    for i in range(NUM_AGENTS):
+    for i in range(number_of_agents):
         agents.append(mp.Process(target=agent,
                                  args=(i, all_cooked_time, all_cooked_bw,
                                        net_params_queues[i],
                                        exp_queues[i],
-                                       get_reward_function())))
-    for i in range(NUM_AGENTS):
+                                       get_reward_function(config.get_model_training_config()),
+                                       config)))
+    for i in range(number_of_agents):
         agents[i].start()
 
     # wait unit training is done

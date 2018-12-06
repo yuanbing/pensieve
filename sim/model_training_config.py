@@ -56,7 +56,7 @@ class ModelTrainingConfig:
         return self._raw_config.getint('default_video_quality')
 
     def get_max_training_epoch(self):
-        return self._raw_config.getint('max_epch')
+        return self._raw_config.getint('max_epoch')
 
     def get_network_trace_location(self):
         return self._raw_config.get('network_traces')

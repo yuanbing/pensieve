@@ -9,6 +9,8 @@ import load_trace
 import shutil
 import pensieve_config as pc
 
+# Disable the GPU devices.
+# If GPU acceleration is desired, please comment out the following line
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 RANDOM_SEED = 42
@@ -119,7 +121,9 @@ def central_agent(net_params_queues, exp_queues, config):
                         filemode='w',
                         level=config.get_logging_config().get_logging_level())
 
-    with tf.Session(graph=tf.Graph()) as sess, \
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    with tf.Session(graph=tf.Graph(), config=tf_config) as sess, \
             open(os.path.join(log_path, 'log_test'), 'w') as test_log_file:
 
         training_config = config.get_model_training_config()
@@ -278,7 +282,9 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
     state_dim = training_config.get_states()
     state_history = training_config.get_state_history()
 
-    with tf.Session() as sess, open(log_file, 'w') as log_file:
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    with tf.Session(config=tf_config) as sess, open(log_file, 'w') as log_file:
         actor = a3c.ActorNetwork(sess,
                                  state_dim=[state_dim, state_history],
                                  action_dim=training_config.get_actions(),
@@ -316,7 +322,7 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
             playback_state = net_env.get_video_chunk(bit_rate)
 
             delay = playback_state.delay
-            sleep_time = playback_state.sleep_time
+            sleep_time = playback_state.sleep_time  # sleep_time is a good indicator for "rich-buffer" scenario
             buffer_size = playback_state.current_buffer_size
             rebuf = playback_state.rebuffer_time
             video_chunk_size = playback_state.video_chunk_size
@@ -344,11 +350,17 @@ def agent(agent_id, all_cooked_time, all_cooked_bw, net_params_queue, exp_queue,
 
             # this should be S_INFO number of terms
             # last quality
+            # last bitrate
             state[0, -1] = training_config.get_bitrates()[bit_rate] / float(np.max(training_config.get_bitrates()))
+            # current buffer size (in seconds, normalized)
             state[1, -1] = buffer_size / training_config.get_buffer_norm_factor()  # 10 sec
+            # last observed throughput
             state[2, -1] = float(video_chunk_size) / float(delay) / M_IN_K  # kilo byte / ms
+            # last chunk download time (in milliseconds, converted to seconds, normalized
             state[3, -1] = float(delay) / M_IN_K / training_config.get_buffer_norm_factor()  # 10 sec
+            # next chunk size (converted to MB), one per supported bitrate
             state[4, :training_config.get_actions()] = np.array(next_video_chunk_sizes) / M_IN_K / M_IN_K  # mega byte
+            # number of remaining chunks
             state[5, -1] = np.minimum(video_chunk_remain, training_config.get_chunk_cap()) / training_config.get_chunk_cap()
 
             # compute action probability vector
@@ -446,6 +458,8 @@ def init(config_file):
 
 
 def main():
+    #print(device_lib.list_local_devices())
+
     np.random.seed(RANDOM_SEED)
 
     config = init('config.ini')

@@ -60,7 +60,7 @@ class Environment:
         self.all_cooked_bw = all_cooked_bw
 
         self.video_chunk_counter = 0
-        self.buffer_size = 0
+        self.buffer_size = 0  # player buffer length, in milliseconds
 
         # pick a random trace file
         self.trace_idx = np.random.randint(len(self.all_cooked_time))
@@ -103,10 +103,11 @@ class Environment:
         video_chunk_counter_sent = 0  # in bytes
 
         while True:  # download video chunk over mahimahi
-            throughput = self.cooked_bw[self.mahimahi_ptr] * B_IN_MB / BITS_IN_BYTE
-            duration = self.cooked_time[self.mahimahi_ptr] - self.last_mahimahi_time
+            # within this loop, the delay is in seconds.
+            throughput = self.cooked_bw[self.mahimahi_ptr] * B_IN_MB / BITS_IN_BYTE  # in bytes
+            duration = self.cooked_time[self.mahimahi_ptr] - self.last_mahimahi_time  # last duration
 
-            packet_payload = throughput * duration * PACKET_PAYLOAD_PORTION
+            packet_payload = throughput * duration * PACKET_PAYLOAD_PORTION  # is this related to Network QoS?
 
             if video_chunk_counter_sent + packet_payload > video_chunk_size:
                 fractional_time = (video_chunk_size - video_chunk_counter_sent) / \
@@ -128,7 +129,7 @@ class Environment:
                 self.last_mahimahi_time = 0
 
         delay *= MILLISECONDS_IN_SECOND
-        delay += LINK_RTT
+        delay += LINK_RTT  # again, the LINK_RTT is related to QoS
 
         # add a multiplicative noise to the delay
         delay *= np.random.uniform(NOISE_LOW, NOISE_HIGH)
@@ -140,7 +141,7 @@ class Environment:
         self.buffer_size = np.maximum(self.buffer_size - delay, 0.0)
 
         # add in the new chunk
-        self.buffer_size += VIDEO_CHUNCK_LEN
+        self.buffer_size += VIDEO_CHUNCK_LEN  # here we're assuming that every video chunk is 4 seconds
 
         # sleep if buffer gets too large
         sleep_time = 0

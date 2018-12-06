@@ -1,12 +1,14 @@
 import os
 import sys
-os.environ['CUDA_VISIBLE_DEVICES']=''
 import numpy as np
 import tensorflow as tf
 import load_trace
 import a3c
 import fixed_env as env
 
+# Disable the GPU devices.
+# If GPU acceleration is desired, please comment out the following line
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 S_INFO = 6  # bit_rate, buffer_size, next_chunk_size, bandwidth_measurement(throughput and time), chunk_til_video_end
 S_LEN = 8  # take how many frames in the past
@@ -42,7 +44,9 @@ def main():
     log_path = LOG_FILE + '_' + all_file_names[net_env.trace_idx]
     log_file = open(log_path, 'wb')
 
-    with tf.Session() as sess:
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    with tf.Session(config=tf_config) as sess:
 
         actor = a3c.ActorNetwork(sess,
                                  state_dim=[S_INFO, S_LEN],

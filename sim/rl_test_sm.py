@@ -6,6 +6,8 @@ import load_trace
 import fixed_env as env
 import a3c
 
+# Disable the GPU devices.
+# If GPU acceleration is desired, please comment out the following line
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 # TF saved_model directory
@@ -22,7 +24,7 @@ S_LEN = 8  # take how many frames in the past
 A_DIM = 6
 ACTOR_LR_RATE = 0.0001
 CRITIC_LR_RATE = 0.001
-VIDEO_BIT_RATE = [300,750,1200,1850,2850,4300]  # Kbps
+VIDEO_BIT_RATE = [300, 750, 1200, 1850, 2850, 4300]  # Kbps
 BUFFER_NORM_FACTOR = 10.0
 CHUNK_TIL_VIDEO_END_CAP = 48.0
 M_IN_K = 1000.0
@@ -36,6 +38,10 @@ TEST_TRACES = './cooked_test_traces/'
 # log in format of time_stamp bit_rate buffer_size rebuffer_time chunk_size download_time reward
 
 
+def predict(session, model_output, model_input, x):
+    return session.run(model_output, feed_dict={model_input: x})
+
+
 def main():
     assert len(VIDEO_BIT_RATE) == A_DIM
 
@@ -47,7 +53,9 @@ def main():
     log_path = LOG_FILE + '_' + all_file_names[net_env.trace_idx]
     log_file = open(log_path, 'w')
 
-    with tf.Session() as sess:
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    with tf.Session(config=tf_config) as sess:
         # Check whether the saved actor model exists
         if not tf.saved_model.loader.maybe_saved_model_directory(ACTOR_MODEL_LOCATION):
             print('Cannot find saved actor model at ' + ACTOR_MODEL_LOCATION)
@@ -60,10 +68,8 @@ def main():
         actor_model_output_name = signature[ACTOR_MODEL_PREDICTION_SIGNATURE_KEY].outputs[ACTOR_MODEL_OUTPUT].name
         actor_model_input = sess.graph.get_tensor_by_name(actor_model_input_name)
         actor_model_output = sess.graph.get_tensor_by_name(actor_model_output_name)
-        #print(tf.contrib.graph_editor.get_tensors(tf.get_default_graph()))
-        #print(sess.graph.get_operations())
 
-        predict = lambda x: sess.run(actor_model_output, feed_dict={actor_model_input: x})
+        #predict = lambda x: sess.run(actor_model_output, feed_dict={actor_model_input: x})
 
         time_stamp = 0
 
@@ -130,7 +136,7 @@ def main():
             state[4, :A_DIM] = np.array(next_video_chunk_sizes) / M_IN_K / M_IN_K  # mega byte
             state[5, -1] = np.minimum(video_chunk_remain, CHUNK_TIL_VIDEO_END_CAP) / float(CHUNK_TIL_VIDEO_END_CAP)
 
-            action_prob = predict(np.reshape(state, (1, S_INFO, S_LEN)))
+            action_prob = predict(sess, actor_model_output, actor_model_input, np.reshape(state, (1, S_INFO, S_LEN)))
             action_cumsum = np.cumsum(action_prob)
             bit_rate = (action_cumsum > np.random.randint(1, RAND_RANGE) / float(RAND_RANGE)).argmax()
             # Note: we need to discredit the probability into 1/RAND_RANGE steps,

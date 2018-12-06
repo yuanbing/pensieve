@@ -1,8 +1,4 @@
-#!/usr/bin/env python
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-import SocketServer
-import base64
-import urllib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
 import os
 import json
@@ -73,12 +69,12 @@ def make_request_handler(input_dict):
         def do_POST(self):
             content_length = int(self.headers['Content-Length'])
             post_data = json.loads(self.rfile.read(content_length))
-            print post_data
+            print(post_data)
 
             if ( 'pastThroughput' in post_data ):
                 # @Hongzi: this is just the summary of throughput/quality at the end of the load
                 # so we don't want to use this information to send back a new quality
-                print "Summary: ", post_data
+                print("Summary: {}".format(post_data))
             else:
                 # option 1. reward for just quality
                 # reward = post_data['lastquality']
@@ -131,7 +127,7 @@ def make_request_handler(input_dict):
                 state = np.roll(state, -1, axis=1)
 
                 next_video_chunk_sizes = []
-                for i in xrange(A_DIM):
+                for i in range(A_DIM):
                     next_video_chunk_sizes.append(get_chunk_size(i, self.input_dict['video_chunk_coount']))
 
                 # this should be S_INFO number of terms
@@ -264,7 +260,7 @@ def run(server_class=HTTPServer, port=8333, log_file_path=LOG_FILE):
 
         server_address = ('localhost', port)
         httpd = server_class(server_address, handler_class)
-        print 'Listening on port ' + str(port)
+        print('Listening on port {}'.format(port))
         httpd.serve_forever()
 
 
@@ -280,7 +276,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print "Keyboard interrupted."
+        print("Keyboard interrupted.")
         try:
             sys.exit(0)
         except SystemExit:
